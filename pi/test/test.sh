@@ -6,6 +6,8 @@ set -eu
 OUT=/out
 mkdir -p "$OUT" /tmp/capture
 chmod 1777 /tmp/capture
+# CUPS가 만든 파일은 0600이라 그대로 복사하면 Linux 호스트의 일반 사용자가 읽지 못한다.
+trap 'chmod -R a+rX "$OUT"' EXIT
 
 DEVICE_URI=capture:/j1660 sh /repo/pi/setup.sh > "$OUT/setup.log" 2>&1 || {
     tail -30 "$OUT/setup.log"

@@ -6,6 +6,8 @@ OUT=/out
 SPOOL=/tmp/cupsout
 mkdir -p "$OUT" "$SPOOL"
 chmod 777 "$SPOOL"
+# CUPS가 만든 파일은 0600이라 그대로 복사하면 Linux 호스트의 일반 사용자가 읽지 못한다.
+trap 'chmod -R a+rX "$OUT"' EXIT
 
 cupsd
 for _ in $(seq 1 20); do lpstat -r >/dev/null 2>&1 && break; sleep 0.5; done

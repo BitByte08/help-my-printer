@@ -10,7 +10,7 @@ jobs:
   shellcheck:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           shellcheck -S warning \
             filter-test/run.sh pi/setup.sh pi/test/*.sh \
@@ -21,7 +21,7 @@ jobs:
   filter-test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t j1660-filter-test filter-test
       - run: docker run --rm -v "$PWD/filter-test/out:/out" j1660-filter-test
       - name: 모든 출력이 PCL3GUI인지 확인
@@ -35,8 +35,8 @@ jobs:
   pi-test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
       - run: docker buildx build --platform linux/arm64 --load -t j1660-pi-test pi/test
@@ -58,5 +58,5 @@ jobs:
       matrix:
         machine: [qemuarm64, raspberrypi4-64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: MACHINE=${{ matrix.machine }} sh yocto/run.sh -g printserver-image
