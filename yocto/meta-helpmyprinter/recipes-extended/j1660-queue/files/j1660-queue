@@ -1,0 +1,32 @@
+#!/bin/sh
+# SL-J1660을 찾아 CUPS 큐를 만들거나 장치 주소를 갱신한다. udev → j1660-queue.service에서 실행된다.
+# 드라이버 선택 근거는 저장소의 filter-test/README.md 참고.
+#   DEVICE_URI  장치 주소를 직접 지정 (테스트용)
+set -e
+QUEUE=${QUEUE:-J1660}
+PPD=${PPD:-drv:///hp/hpcups.drv/hp-deskjet_2130_series.ppd}
+
+i=0
+until lpstat -r >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ "$i" -le 30 ] || { echo "cupsd not responding" >&2; exit 1; }
+    sleep 1
+done
+
+uri=${DEVICE_URI:-$(lpinfo --include-schemes usb -v | awk '$2 ~ /^usb:\/\/Samsung\/SL-J16/ { print $2; exit }')}
+if [ -z "$uri" ]; then
+    echo "SL-J1660 not found" >&2
+    exit 0
+fi
+
+current=$(lpstat -v "$QUEUE" 2>/dev/null | awk '{ print $NF }')
+if [ "$current" = "$uri" ]; then
+    echo "$QUEUE already configured: $uri"
+    exit 0
+fi
+
+lpadmin -p "$QUEUE" -E -v "$uri" -m "$PPD" \
+    -D "Samsung SL-J1660" -L "$(hostname)" \
+    -o printer-is-shared=true -o PageSize=A4 -o OutputMode=Normal
+lpadmin -d "$QUEUE"
+echo "$QUEUE configured: $uri"

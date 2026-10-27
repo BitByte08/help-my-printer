@@ -1,0 +1,3 @@
+# Samsung SL-J1660 (04e8:3954): CUPS usb 백엔드(lp 사용자)가 접근할 수 있게 하고 큐 설정 서비스를 띄운다.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="04e8", ATTR{idProduct}=="3954", \
+    GROUP="lp", MODE="0664", TAG+="systemd", ENV{SYSTEMD_WANTS}+="j1660-queue.service"

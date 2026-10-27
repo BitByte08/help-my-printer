@@ -1,0 +1,8 @@
+[Unit]
+Description=Configure CUPS queue for Samsung SL-J1660
+Wants=cups.service
+After=cups.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/j1660-queue

@@ -1,0 +1,61 @@
+From: helpmyprinter
+Subject: [PATCH] Let IsChromeOs always return 0
+
+IsChromeOs() copies the os-release NAME value into a 30-byte stack
+buffer without a bounds check. Poky's NAME is 39 bytes, so hpcups aborts
+with "stack smashing detected" on every page. Same approach as Debian's
+0076-Let-IsChromeOS-always-return-0.patch.
+
+Upstream-Status: Inappropriate [Debian/embedded workaround; fixed upstream in 3.26.x]
+---
+--- a/common/utils.c
++++ b/common/utils.c
+@@ -9,45 +9,9 @@
+ 
+ unsigned char IsChromeOs(void)
+ {
+-  int file_size=0,i=0;
+-  unsigned char ret_stat = 0;
+-  char *buf;
+-  char *ptr;
+-  char os_name[30]={0,};
+-
+-
+-  FILE *fptr = fopen("/etc/os-release","r");
+-  if(fptr == NULL)
+-    return ret_stat;
+-  fseek(fptr,0,SEEK_END);
+-  file_size = ftell(fptr);
+-  fseek(fptr,0,SEEK_SET);
+-
+-  buf = (char *)malloc(file_size);
+-  fread(buf,file_size,1,fptr);
+-
+-  ptr=strstr(buf,"NAME");
+-  if(ptr != NULL)
+-  {
+-    ptr = ptr + 5;
+-    while(*ptr!='\n'&&*ptr!='\0')
+-    {
+-      os_name[i]=*ptr;
+-      ptr++;i++;
+-    }
+-    if(strcasestr(os_name,"chrome os")!=NULL)
+-      ret_stat = 1;
+-    else
+-      ret_stat = 0;
+-
+-  }
+-  
+-  fclose(fptr);
+-  free(buf);
+-
+-  return ret_stat;
+-
+-
++  /* Not ChromeOS. The original parser overflowed os_name[30] on long
++   * os-release NAME values such as Yocto Poky's. */
++  return 0;
+ }
+ 
+ static int GetPair(char *buf, int buf_len, char *key, char *value, char **tail)

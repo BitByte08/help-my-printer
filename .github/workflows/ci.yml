@@ -1,0 +1,62 @@
+# 가벼운 검증만 돌린다. Yocto 이미지 빌드(16코어 1시간 40분, 디스크 40GB+)는 로컬에서 yocto/run.sh로 한다.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          shellcheck -S warning \
+            filter-test/run.sh pi/setup.sh pi/test/*.sh \
+            yocto/*.sh yocto/test/*.sh \
+            yocto/meta-helpmyprinter/recipes-extended/j1660-queue/files/j1660-queue
+
+  # Debian hpcups가 DeskJet 2130/1110 PPD로 PCL3GUI를 만드는지 (filter-test/README.md)
+  filter-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t j1660-filter-test filter-test
+      - run: docker run --rm -v "$PWD/filter-test/out:/out" j1660-filter-test
+      - name: 모든 출력이 PCL3GUI인지 확인
+        run: |
+          set -- filter-test/out/*.prn
+          [ -e "$1" ] || { echo "출력 없음"; exit 1; }
+          for f; do grep -aq 'LANGUAGE=PCL3GUI' "$f" || { echo "$f: PCL3GUI 아님"; exit 1; }; done
+          echo "$# 개 출력 확인"
+
+  # pi/setup.sh로 만든 큐가 AirPrint/Mopria 조건을 갖추는지 (arm64 에뮬레이션, pi/README.md)
+  pi-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - run: docker buildx build --platform linux/arm64 --load -t j1660-pi-test pi/test
+      - run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD:/repo" -v "$PWD/pi/test/out:/out" j1660-pi-test sh /repo/pi/test/test.sh
+      - name: 광고, IPP 형식, 출력 확인
+        run: |
+          cd pi/test/out
+          grep -q J1660 avahi-universal.txt
+          grep -q 'URF=' avahi-ipp.txt
+          for fmt in application/pdf image/pwg-raster image/urf; do grep -q "$fmt" ipp-attributes.txt; done
+          for f in sample.pdf.prn sample.pwg.prn sample.urf.prn; do grep -aq 'LANGUAGE=PCL3GUI' "$f"; done
+
+  # 레시피를 파싱하고 이미지의 의존성이 모두 풀리는지 (빌드는 하지 않는다)
+  yocto-deps:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        machine: [qemuarm64, raspberrypi4-64]
+    steps:
+      - uses: actions/checkout@v4
+      - run: MACHINE=${{ matrix.machine }} sh yocto/run.sh -g printserver-image
