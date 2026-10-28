@@ -1,0 +1,10 @@
+# 유선(80-wired.network, RouteMetric=10)이 연결돼 있으면 유선을 우선한다.
+[Match]
+Type=wlan
+
+[Network]
+DHCP=yes
+
+[DHCP]
+RouteMetric=20
+ClientIdentifier=mac

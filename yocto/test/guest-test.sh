@@ -78,5 +78,54 @@ for f in /tmp/sample.pdf /tmp/sample.pwg /tmp/sample.urf; do
     echo "$name: $(wc -c < "/tmp/capture/$job") bytes, $(grep -a -o 'LANGUAGE=[A-Z0-9]*' "/tmp/capture/$job" | head -n 1), ${i}초"
 done
 
+echo "== 실물 시험 도구 (j1660-test, J1660Compat)"
+grep '^\*cupsFilter' /etc/cups/ppd/J1660.ppd
+lpoptions -p J1660 -l | grep J1660Compat
+for t in win hpcups compat; do
+    before=$(ls /tmp/capture | wc -l)
+    j1660-test "$t" > /dev/null
+    i=0
+    while { [ "$(ls /tmp/capture | wc -l)" -le "$before" ] || [ -n "$(lpstat -o J1660)" ]; } && [ "$i" -lt 120 ]; do
+        i=$((i + 1)); sleep 1
+    done
+    job=/tmp/capture/$(ls -t /tmp/capture | head -n 1)
+    T=$t perl -0777 -ne '
+        my $nul = /\A(\0*)/ ? length $1 : 0;
+        my $sub = () = /\e\*o5W\x0d\x03\x00\x03\xec/g;
+        my $col = () = /\e\*o5W\x0b\x01\x00\x00\x00/g;
+        printf "%-7s %6d bytes, NUL %d, subtype1004 %d, color00 %d", $ENV{T}, length, $nul, $sub, $col;' "$job" ||
+        printf '%-7s 출력 없음' "$t"
+    [ "$t" = win ] && { cmp -s "$job" /usr/share/j1660-queue/win-sample.prn && printf ', 원본과 같음' || printf ', 원본과 다름'; }
+    echo
+done
+# 큐 기본값으로 켜면 옵션 없는 작업(휴대전화)에도 적용되어야 한다.
+lpadmin -p J1660 -o J1660Compat=True
+before=$(ls /tmp/capture | wc -l)
+lp -d J1660 /tmp/sample.pdf > /dev/null
+i=0
+while { [ "$(ls /tmp/capture | wc -l)" -le "$before" ] || [ -n "$(lpstat -o J1660)" ]; } && [ "$i" -lt 120 ]; do
+    i=$((i + 1)); sleep 1
+done
+lpadmin -p J1660 -o J1660Compat=False
+perl -0777 -ne 'printf "기본값 켬  NUL %d\n", /\A(\0*)/ ? length $1 : 0' "/tmp/capture/$(ls -t /tmp/capture | head -n 1)"
+
+echo "== 와이파이 설정 (wifi.txt, QEMU에는 무선 장치가 없어 설정 파일만 확인)"
+printf '%s' "$(systemctl is-active printpi-wifi)  "; journalctl -u printpi-wifi -o cat --no-pager | tail -n 1
+systemctl cat wpa_supplicant@wlan0.service | grep -E '^# .*printpi|power_save|ConditionPathExists'
+# 메모장 형식: BOM, CRLF, 한글 SSID, 소문자 키, 공백
+printf '\357\273\277ssid = 우리집 "와이파이"\r\nPassword= pass word12 \r\n' > /tmp/wifi.txt
+WIFI_TXT=/tmp/wifi.txt CONF=/tmp/wpa.conf printpi-wifi
+grep -E 'country|ssid|psk|key_mgmt' /tmp/wpa.conf
+perl -ne 'print "SSID 복원: [", pack("H*", $1), "]\n" if /^\s*ssid=([0-9a-f]+)/' /tmp/wpa.conf
+printf 'SSID=open\nPASSWORD=\nCOUNTRY=US\n' > /tmp/wifi-open.txt
+WIFI_TXT=/tmp/wifi-open.txt CONF=/tmp/wpa-open.conf printpi-wifi > /dev/null && grep -E 'country|key_mgmt' /tmp/wpa-open.conf | tr '\n' ' '; echo
+printf 'SSID=x\nPASSWORD=short\n' > /tmp/wifi-bad.txt
+WIFI_TXT=/tmp/wifi-bad.txt CONF=/tmp/wpa-bad.conf printpi-wifi || echo "짧은 비밀번호 거부 (정상)"
+
+echo "== 상태 보고서 (printpi-status.txt)"
+echo "타이머: $(systemctl is-active printpi-status.timer)"
+mkdir -p /tmp/status
+STATUS_DIR=/tmp/status printpi-status && head -n 12 /tmp/status/printpi-status.txt
+
 echo "== CUPS 오류 로그"
 grep -E "^E " /var/log/cups/error_log 2>/dev/null | tail -5 || true

@@ -3,6 +3,7 @@
 # 사용법: build.sh [bitbake 인자...]   (기본: printserver-image)
 #   MACHINE=raspberrypi4-64 build.sh   로 대상 보드를 바꾼다 (기본 qemuarm64)
 #   UPDATE=1 build.sh                  로 레이어를 최신 커밋으로 갱신한다
+#   DEPLOY=1 build.sh                  로 현장 설치용 이미지를 만든다 (SSH 로그인 막음)
 set -euo pipefail
 
 W=/work
@@ -33,7 +34,7 @@ mkdir -p "$W/build/conf"
 cp "$REPO/conf/local.conf" "$REPO/conf/bblayers.conf" "$W/build/conf/"
 
 export BITBAKEDIR=$L/bitbake
-export BB_ENV_PASSTHROUGH_ADDITIONS="${BB_ENV_PASSTHROUGH_ADDITIONS:-} MACHINE"
+export BB_ENV_PASSTHROUGH_ADDITIONS="${BB_ENV_PASSTHROUGH_ADDITIONS:-} MACHINE DEPLOY"
 set +u
 # shellcheck disable=SC1091
 . "$L/openembedded-core/oe-init-build-env" "$W/build" >/dev/null

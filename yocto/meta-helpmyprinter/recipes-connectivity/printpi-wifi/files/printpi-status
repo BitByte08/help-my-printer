@@ -1,0 +1,78 @@
+#!/bin/sh
+# 상태 보고서를 SD카드 boot 파티션의 printpi-status.txt에 쓴다. SSH 없이 SD카드를 PC에 꽂아 확인하는 용도.
+# printpi-status.timer가 부팅 90초 뒤와 이후 5분마다 실행한다. 비밀번호는 쓰지 않는다.
+# 시험용: STATUS_DIR=폴더 printpi-status
+set -u
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+{
+    echo "printpi 상태 보고서  $(date '+%Y-%m-%d %H:%M:%S %Z')  (부팅 후 $(cut -d. -f1 /proc/uptime)초)"
+    echo "이미지: $(. /etc/os-release && echo "$PRETTY_NAME")"
+    echo
+
+    echo "== 네트워크 주소"
+    ip -4 addr show | awk '/^[0-9]+:/ { dev = $2 } /inet / { print dev, $2 }'
+    ip route | grep '^default' || echo "기본 경로 없음 (네트워크 연결 안 됨)"
+    echo
+
+    echo "== 와이파이"
+    if [ -e /sys/class/net/wlan0 ]; then
+        iw dev wlan0 link
+    else
+        echo "wlan0 없음 (무선 드라이버나 펌웨어가 없음)"
+    fi
+    echo "printpi-wifi: $(systemctl is-active printpi-wifi)   wpa_supplicant@wlan0: $(systemctl is-active wpa_supplicant@wlan0)"
+    echo "-- 설정 (비밀번호 제외)"
+    grep -v psk /etc/wpa_supplicant/wpa_supplicant-wlan0.conf 2>/dev/null
+    echo "-- 주변 와이파이 (주파수, 신호, 보안)"
+    [ -e /sys/class/net/wlan0 ] && iw dev wlan0 scan dump 2>/dev/null | awk '
+        function out() { if (bss != "") printf "%s %s MHz %s dBm [%s] %s\n", bss, f, s, id, (auth == "" ? "open" : auth) }
+        /^BSS / { out(); bss = substr($2, 1, 17); f = s = id = auth = "" }
+        /^\tfreq:/ { f = $2 }
+        /^\tsignal:/ { s = $2 }
+        /^\tSSID:/ { id = substr($0, index($0, ":") + 2) }
+        /Authentication suites:/ { auth = auth substr($0, index($0, ":") + 2) " " }
+        END { out() }' | head -n 15
+    echo "-- 접속 기록"
+    journalctl -b -u printpi-wifi -u wpa_supplicant@wlan0 -o short-monotonic --no-pager |
+        grep -v 'sched scan' | tail -n 40
+    echo "-- 드라이버"
+    journalctl -b -k -o short-monotonic --no-pager | grep -i -E 'brcmf|cfg80211|wlan0' | tail -n 15
+    echo
+
+    echo "== USB 장치"
+    for d in /sys/bus/usb/devices/*; do
+        [ -f "$d/idVendor" ] || continue
+        echo "$(cat "$d/idVendor"):$(cat "$d/idProduct") $(cat "$d/manufacturer" 2>/dev/null) $(cat "$d/product" 2>/dev/null)"
+    done
+    echo
+
+    echo "== 프린터"
+    echo "cups: $(systemctl is-active cups)   avahi-daemon: $(systemctl is-active avahi-daemon)"
+    lpstat -t 2>&1 | head -n 20
+    journalctl -b -u j1660-queue -o short-monotonic --no-pager | tail -n 5
+    echo
+
+    echo "== 최근 경고/오류"
+    journalctl -b -p warning -o short-monotonic --no-pager | tail -n 30
+    tail -n 10 /var/log/cups/error_log 2>/dev/null
+} > "$WORK/status.txt" 2>&1
+
+# boot 파티션이 마운트돼 있지 않으면 잠깐 마운트해서 쓴다. 전원이 끊겨도 깨지지 않게 임시 파일에 쓴 뒤 이름을 바꾼다.
+if [ -n "${STATUS_DIR:-}" ]; then
+    dir=$STATUS_DIR
+elif grep -q ' /boot ' /proc/mounts; then
+    dir=/boot
+elif [ -e /dev/disk/by-label/boot ]; then
+    dir=$WORK/boot
+    mkdir "$dir"
+    mount -o rw /dev/disk/by-label/boot "$dir" || exit 1
+else
+    exit 0
+fi
+cp "$WORK/status.txt" "$dir/printpi-status.tmp" && mv "$dir/printpi-status.tmp" "$dir/printpi-status.txt"
+sync
+[ "$dir" = "$WORK/boot" ] && umount "$dir"
+exit 0

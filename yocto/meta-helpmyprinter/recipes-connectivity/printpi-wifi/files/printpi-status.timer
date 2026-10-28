@@ -1,0 +1,9 @@
+[Unit]
+Description=Write printpi-status.txt after boot and every 5 minutes
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

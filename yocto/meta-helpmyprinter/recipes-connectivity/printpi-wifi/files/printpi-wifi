@@ -1,0 +1,91 @@
+#!/bin/sh
+# SD카드 boot 파티션의 wifi.txt를 읽어 wlan0 설정을 만든다. 부팅 때 printpi-wifi.service가 실행하고,
+# wlan0가 생기면 udev가 wpa_supplicant@wlan0를 띄운다.
+#
+# wifi.txt (메모장으로 작성해 boot 드라이브에 저장):
+#   SSID=와이파이 이름
+#   PASSWORD=비밀번호      비워 두면 암호 없는 와이파이
+#   COUNTRY=KR             생략하면 KR
+#
+# 파일이 없으면 이전 설정을 그대로 둔다. 파일은 지우지 않는다.
+# 시험용: WIFI_TXT=파일 CONF=출력경로 printpi-wifi
+set -eu
+umask 077
+
+CONF=${CONF:-/etc/wpa_supplicant/wpa_supplicant-wlan0.conf}
+TXT=${WIFI_TXT:-}
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+if [ -z "$TXT" ]; then
+    if [ -f /boot/wifi.txt ]; then
+        TXT=/boot/wifi.txt
+    elif [ -e /dev/disk/by-label/boot ]; then
+        mkdir "$WORK/boot"
+        if mount -o ro /dev/disk/by-label/boot "$WORK/boot"; then
+            [ -f "$WORK/boot/wifi.txt" ] && cp "$WORK/boot/wifi.txt" "$WORK/wifi.txt" && TXT=$WORK/wifi.txt
+            umount "$WORK/boot"
+        fi
+    fi
+fi
+if [ -z "$TXT" ]; then
+    echo "wifi.txt 없음, 기존 설정 유지"
+    exit 0
+fi
+
+# 메모장이 붙이는 BOM과 CRLF를 없앤다. (이미지의 BusyBox에는 head -c, od -A가 없어 바이트 처리는 perl로 한다)
+perl -pe 's/^\xef\xbb\xbf// if $. == 1; s/\r$//' "$TXT" > "$WORK/clean"
+
+# KEY=값 (키는 대소문자 무시, 앞뒤 공백 무시)
+get() {
+    awk -v key="$1" '{
+        i = index($0, "=")
+        if (!i) next
+        k = substr($0, 1, i - 1); gsub(/^[ \t]+|[ \t]+$/, "", k)
+        if (toupper(k) != key) next
+        v = substr($0, i + 1); gsub(/^[ \t]+|[ \t]+$/, "", v)
+        print v
+        exit
+    }' "$WORK/clean"
+}
+
+ssid=$(get SSID)
+pass=$(get PASSWORD)
+country=$(get COUNTRY)
+country=${country:-KR}
+
+if [ -z "$ssid" ]; then
+    echo "wifi.txt: SSID가 없음" >&2
+    exit 1
+fi
+if [ -n "$pass" ] && { [ ${#pass} -lt 8 ] || [ ${#pass} -gt 63 ]; }; then
+    echo "wifi.txt: PASSWORD는 8~63자여야 함 (${#pass}자)" >&2
+    exit 1
+fi
+
+# SSID는 한글, 따옴표 등이 들어가도 되도록 16진수로 쓴다.
+hex=$(printf %s "$ssid" | perl -ne 'print unpack("H*", $_)')
+# Pi 4 칩(brcmfmac)은 예약 스캔을 지원하지 않아 끄고, PMF(ieee80211w)는 켜면 일부 AP에 붙지 못해 쓰지 않는다.
+{
+    echo "ctrl_interface=/run/wpa_supplicant"
+    echo "country=$country"
+    echo "disable_scan_offload=1"
+    echo "network={"
+    echo "    ssid=$hex"
+    echo "    scan_ssid=1"
+    if [ -n "$pass" ]; then
+        echo "    psk=\"$pass\""
+        echo "    key_mgmt=WPA-PSK"
+    else
+        echo "    key_mgmt=NONE"
+    fi
+    echo "}"
+} > "$WORK/conf"
+
+if cmp -s "$WORK/conf" "$CONF"; then
+    echo "와이파이 설정 그대로: $ssid"
+else
+    mkdir -p "$(dirname "$CONF")"
+    mv "$WORK/conf" "$CONF"
+    echo "와이파이 설정 갱신: $ssid ($country)"
+fi

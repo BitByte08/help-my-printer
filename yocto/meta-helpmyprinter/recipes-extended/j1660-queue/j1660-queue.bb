@@ -6,6 +6,9 @@ SRC_URI = " \
     file://j1660-queue \
     file://j1660-queue.service \
     file://70-j1660.rules \
+    file://hpcups-j1660 \
+    file://j1660-test \
+    file://win-sample.prn \
 "
 
 S = "${UNPACKDIR}"
@@ -20,8 +23,11 @@ do_install() {
     install -D -m 0755 ${S}/j1660-queue ${D}${sbindir}/j1660-queue
     install -D -m 0644 ${S}/j1660-queue.service ${D}${systemd_system_unitdir}/j1660-queue.service
     install -D -m 0644 ${S}/70-j1660.rules ${D}${nonarch_base_libdir}/udev/rules.d/70-j1660.rules
+    install -D -m 0755 ${S}/hpcups-j1660 ${D}${libexecdir}/cups/filter/hpcups-j1660
+    install -D -m 0755 ${S}/j1660-test ${D}${sbindir}/j1660-test
+    install -D -m 0644 ${S}/win-sample.prn ${D}${datadir}/${BPN}/win-sample.prn
 }
 
 FILES:${PN} += "${nonarch_base_libdir}/udev/rules.d"
 
-RDEPENDS:${PN} = "cups hplip-filter hplip-cups"
+RDEPENDS:${PN} = "cups hplip-filter hplip-cups perl ghostscript"

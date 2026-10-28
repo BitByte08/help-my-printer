@@ -1,0 +1,6 @@
+[Unit]
+Description=Write status report to printpi-status.txt on the boot partition
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/printpi-status

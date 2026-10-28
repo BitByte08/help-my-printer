@@ -15,7 +15,10 @@ jobs:
           shellcheck -S warning \
             filter-test/run.sh pi/setup.sh pi/test/*.sh \
             yocto/*.sh yocto/test/*.sh \
-            yocto/meta-helpmyprinter/recipes-extended/j1660-queue/files/j1660-queue
+            yocto/meta-helpmyprinter/recipes-extended/j1660-queue/files/j1660-queue \
+            yocto/meta-helpmyprinter/recipes-extended/j1660-queue/files/j1660-test \
+            yocto/meta-helpmyprinter/recipes-connectivity/printpi-wifi/files/printpi-wifi \
+            yocto/meta-helpmyprinter/recipes-connectivity/printpi-wifi/files/printpi-status
 
   # Debian hpcups가 DeskJet 2130/1110 PPD로 PCL3GUI를 만드는지 (filter-test/README.md)
   filter-test:

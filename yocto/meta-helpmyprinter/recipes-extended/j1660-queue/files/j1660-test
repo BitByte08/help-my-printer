@@ -1,0 +1,39 @@
+#!/bin/sh
+# 실물 프린터 첫 시험용. 한 번에 한 장씩 보내고 프린터 반응을 본다.
+#   j1660-test win     Windows 드라이버가 만든 데이터를 변환 없이 보낸다 (USB 경로 확인용)
+#   j1660-test hpcups  기본 방식 (hpcups)
+#   j1660-test compat  hpcups + Windows 호환 보정 (J1660Compat)
+# win만 인쇄되면 compat을, compat도 안 되면 결과를 알려 달라.
+set -eu
+QUEUE=${QUEUE:-J1660}
+DATA=/usr/share/j1660-queue
+
+page() {
+    gs -q -dSAFER -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile="$2" - <<EOF
+%!PS
+<< /PageSize [595 842] >> setpagedevice
+/Helvetica findfont 28 scalefont setfont
+72 760 moveto (SL-J1660 test: $1) show
+1 0 0 setrgbcolor 72 560 120 120 rectfill
+0 0 1 setrgbcolor 352 560 120 120 rectfill
+0 0 0 setrgbcolor 72 400 400 100 rectfill
+showpage
+EOF
+}
+
+case "${1:-}" in
+win)
+    lp -d "$QUEUE" -o raw -t "j1660-test win" "$DATA/win-sample.prn"
+    ;;
+hpcups | compat)
+    pdf=/tmp/j1660-test-$1.pdf
+    page "$1" "$pdf"
+    compat=False
+    [ "$1" = compat ] && compat=True
+    lp -d "$QUEUE" -o J1660Compat=$compat -t "j1660-test $1" "$pdf"
+    ;;
+*)
+    sed -n '2,6s/^# \{0,1\}//p' "$0"
+    exit 2
+    ;;
+esac

@@ -1,0 +1,103 @@
+#!/usr/bin/perl
+# hpcups를 감싸는 CUPS 필터. J1660Compat 옵션이 꺼져 있으면(기본) hpcups를 그대로 실행하고,
+# 켜져 있으면 출력의 머리말을 Windows 드라이버(Samsung SL-J1660 Series)와 같게 맞춘다.
+#   - 작업 맨 앞에 NUL 11000바이트
+#   - 페이지마다 미디어 subtype 0 → 1004(03 ec), 단면 명령(&l0S) 추가
+#   - 컬러 작업이면 컬러 모드 명령(*o5W 0b 01 00 00 00) 추가. 흑백(KGray/CMYGray)은 hpcups가 직접 보낸다.
+# 비교 근거: filter-test/README.md
+#
+# 켜는 법: lp -o J1660Compat=True ...       (작업 하나)
+#          lpadmin -p J1660 -o J1660Compat=True  (큐 기본값)
+
+my $hpcups = '/usr/libexec/cups/filter/hpcups';
+my $options = $ARGV[4] // '';
+
+# 작업 옵션에 없으면 PPD 기본값을 쓴다. CUPS는 불리언 값을 "name"(참)과 "noname"(거짓)으로 넘긴다.
+sub option {
+    my ($name) = @_;
+    return $1 if $options =~ /(?:^|\s)\Q$name\E=(\S+)/;
+    return 'True' if $options =~ /(?:^|\s)\Q$name\E(?:\s|$)/;
+    return 'False' if $options =~ /(?:^|\s)no\Q$name\E(?:\s|$)/;
+    if (open my $ppd, '<', $ENV{PPD} // '') {
+        while (<$ppd>) {
+            return $1 if /^\*Default\Q$name\E:\s*(\S+)/;
+        }
+    }
+    return '';
+}
+
+if (option('J1660Compat') !~ /^(true|on|yes)$/i) {
+    exec $hpcups, @ARGV or die "ERROR: $hpcups: $!\n";
+}
+
+my $page_header = "\e&l0S\e*o5W\x0d\x03\x00\x03\xec";
+$page_header .= "\e*o5W\x0b\x01\x00\x00\x00" if option('ColorModel') !~ /gray/i;
+
+open my $in, '-|', $hpcups, @ARGV or die "ERROR: $hpcups: $!\n";
+binmode $in;
+binmode STDOUT;
+print "\0" x 11000;
+
+my $buf = '';
+my $eof = 0;
+
+sub more {
+    $eof = 1 unless read $in, $buf, 65536, length $buf;
+}
+
+# $buf가 ESC로 시작할 때 명령 하나(뒤따르는 데이터 포함)의 길이. 입력이 모자라면 0.
+# PCL 파라미터 명령: ESC, 그룹(!../), 선택적 파라미터 문자, (값, 종결 문자)의 반복.
+# 소문자 종결은 같은 그룹이 이어지고, W/V 종결은 값만큼 데이터가 따라온다.
+sub command_length {
+    my $n = length $buf;
+    return 0 if $n < 2;
+    return 2 if substr($buf, 1, 1) !~ /[!-\/]/;
+    my $i = 2;
+    $i++ if $i < $n && substr($buf, $i, 1) =~ /[`-~]/;
+    while (1) {
+        my $j = $i;
+        $j++ while $j < $n && substr($buf, $j, 1) =~ /[-+0-9.]/;
+        return 0 if $j >= $n;
+        my $term = substr $buf, $j, 1;
+        my $value = substr $buf, $i, $j - $i;
+        $i = $j + 1;
+        $i += int($value || 0) if $term =~ /[WVwv]/;
+        return 0 if $i > $n;
+        return $i if $term =~ /[@-^]/;
+        # 형식에 맞지 않으면 ESC 한 바이트만 넘기고 다시 찾는다.
+        return 1 if $term !~ /[`-~]/;
+    }
+}
+
+while (1) {
+    my $esc = index $buf, "\e";
+    if ($esc < 0) {
+        print $buf;
+        $buf = '';
+        last if $eof;
+        more();
+        next;
+    }
+    print substr($buf, 0, $esc, '') if $esc;
+
+    my $len = command_length();
+    if (!$len) {
+        if ($eof) {
+            print $buf;
+            last;
+        }
+        more();
+        next;
+    }
+    my $cmd = substr $buf, 0, $len, '';
+    if ($cmd =~ /\A\e\*o5W\x0d\x03\x00..\z/s) {
+        print $page_header;
+    } else {
+        print $cmd;
+    }
+}
+
+close $in;
+exit 0 unless $?;
+print STDERR "ERROR: hpcups ", ($? & 127 ? "killed by signal " . ($? & 127) : "exited with " . ($? >> 8)), "\n";
+exit 1;
