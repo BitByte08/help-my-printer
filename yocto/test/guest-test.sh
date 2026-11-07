@@ -21,6 +21,10 @@ chmod 1777 /tmp/capture
 cupsctl --debug-logging
 DEVICE_URI=capture:/j1660 /usr/sbin/j1660-queue
 lpstat -d -v
+# 인쇄 중 프린터가 꺼져 큐가 멈춘 경우: 프린터가 다시 연결되면(udev → j1660-queue) 큐가 다시 켜져야 한다.
+cupsdisable -r "test" J1660
+DEVICE_URI=capture:/j1660 /usr/sbin/j1660-queue | tail -n 1
+lpstat -p J1660 | grep -q enabled && echo "멈춘 큐 복구: 됨" || echo "멈춘 큐 복구: 안 됨"
 
 IP=$(ip route get 1.1.1.1 | awk '{ for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1) }')
 URI="ipp://$IP:631/printers/J1660"
@@ -32,7 +36,7 @@ avahi-browse -tp _universal._sub._ipp._tcp | grep -q J1660 && echo "_universal �
 
 echo "== IPP 속성 ($URI)"
 ipptool -tv "$URI" get-printer-attributes.test > /tmp/attrs.txt || echo "IPP 접속 실패"
-grep -E "^ *(urf-supported|pwg-raster-document-resolution-supported|media-default|printer-make-and-model) " /tmp/attrs.txt
+grep -E "^ *(urf-supported|pwg-raster-document-resolution-supported|media-default|printer-make-and-model|printer-error-policy) " /tmp/attrs.txt
 grep -o "image/urf\|image/pwg-raster\|application/pdf" /tmp/attrs.txt | sort -u | tr '\n' ' '
 echo
 

@@ -22,19 +22,17 @@ fi
 current=$(lpstat -v "$QUEUE" 2>/dev/null | awk '{ print $NF }')
 if [ "$current" = "$uri" ]; then
     echo "$QUEUE already configured: $uri"
-    exit 0
-fi
+else
+    lpadmin -p "$QUEUE" -E -v "$uri" -m "$PPD" \
+        -D "Samsung SL-J1660" -L "$(hostname)" \
+        -o printer-is-shared=true -o PageSize=A4 -o OutputMode=Normal
 
-lpadmin -p "$QUEUE" -E -v "$uri" -m "$PPD" \
-    -D "Samsung SL-J1660" -L "$(hostname)" \
-    -o printer-is-shared=true -o PageSize=A4 -o OutputMode=Normal
-
-# hpcups 대신 래퍼(hpcups-j1660)를 쓰게 하고 Windows 호환 옵션을 추가한다. 기본은 꺼짐.
-ppd=$(mktemp)
-sed 's|^\*cupsFilter: "application/vnd.cups-raster 0 hpcups"$|*cupsFilter: "application/vnd.cups-raster 0 hpcups-j1660"|' \
-    "/etc/cups/ppd/$QUEUE.ppd" > "$ppd"
-grep -q hpcups-j1660 "$ppd" || { echo "PPD has no hpcups filter line" >&2; rm -f "$ppd"; exit 1; }
-cat >> "$ppd" <<'EOF'
+    # hpcups 대신 래퍼(hpcups-j1660)를 쓰게 하고 Windows 호환 옵션을 추가한다. 기본은 꺼짐.
+    ppd=$(mktemp)
+    sed 's|^\*cupsFilter: "application/vnd.cups-raster 0 hpcups"$|*cupsFilter: "application/vnd.cups-raster 0 hpcups-j1660"|' \
+        "/etc/cups/ppd/$QUEUE.ppd" > "$ppd"
+    grep -q hpcups-j1660 "$ppd" || { echo "PPD has no hpcups filter line" >&2; rm -f "$ppd"; exit 1; }
+    cat >> "$ppd" <<'EOF'
 *OpenUI *J1660Compat/Windows Driver Compatibility: Boolean
 *OrderDependency: 100 AnySetup *J1660Compat
 *DefaultJ1660Compat: False
@@ -42,8 +40,16 @@ cat >> "$ppd" <<'EOF'
 *J1660Compat True/On: ""
 *CloseUI: *J1660Compat
 EOF
-lpadmin -p "$QUEUE" -P "$ppd"
-rm -f "$ppd"
+    lpadmin -p "$QUEUE" -P "$ppd"
+    rm -f "$ppd"
 
-lpadmin -d "$QUEUE"
-echo "$QUEUE configured: $uri"
+    lpadmin -d "$QUEUE"
+    echo "$QUEUE configured: $uri"
+fi
+
+# 인쇄 중에 프린터가 꺼지거나 종이가 걸리면 기본 정책(stop-printer)은 큐를 멈추고, 현장에는 이를 풀 사람이 없다.
+# 실패한 작업은 지우지 않고 다시 시도하게 하고(retry-job), 프린터가 다시 연결될 때마다 큐를 켠다.
+lpadmin -p "$QUEUE" -o printer-error-policy=retry-job
+cupsenable "$QUEUE"
+cupsaccept "$QUEUE"
+echo "$QUEUE enabled (error policy: retry-job)"

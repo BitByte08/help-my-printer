@@ -20,7 +20,7 @@ sh yocto/run-test.sh                             # qemuarm64 이미지를 QEMU�
 |---|---|
 | `recipes-core/images/printserver-image.bb` | cups, cups-filters, ghostscript, hplip(hpcups), avahi, dropbear |
 | `recipes-extended/cups/` | `cupsd.conf`: 631 포트 공유, dnssd 광고, 웹 UI 끔 |
-| `recipes-extended/j1660-queue/` | USB 연결 시 udev → systemd로 J1660 큐 자동 생성 |
+| `recipes-extended/j1660-queue/` | USB 연결 시 udev → systemd로 J1660 큐 자동 생성. 연결될 때마다 큐를 켜고 오류 정책은 `retry-job` (인쇄 중 프린터가 꺼지거나 종이가 걸려도 큐가 멈춘 채 남지 않음) |
 | `recipes-extended/hplip/` | hpcups 크래시 수정 패치 (아래) |
 
 ### hplip 패치
@@ -93,6 +93,9 @@ hpcups 출력을 실물이 받아들이는지는 프린터로만 확인할 수 �
 
 - win만 인쇄되면 `lpadmin -p J1660 -o J1660Compat=True`로 보정을 기본으로 켠다. 휴대전화 작업에도 적용된다.
 - 셋 다 안 되면 `lpstat -t`, `tail -50 /var/log/cups/error_log`과 프린터 반응을 기록한다.
+
+**실측 (2026-11-07, Pi 4 + SL-J1660, 공유기 2.4GHz):** `j1660-test win`과 안드로이드(Galaxy, 기본 인쇄 서비스)에서
+보낸 JPG 2장이 모두 정상 인쇄됐다. 휴대전화 작업은 기본 방식(hpcups, 보정 꺼짐)으로 처리됐으므로 보정은 켜지 않는다.
 
 ### Windows 호환 보정 (`hpcups-j1660`)
 
