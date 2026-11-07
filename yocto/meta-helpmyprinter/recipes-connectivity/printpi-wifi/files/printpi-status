@@ -9,7 +9,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 {
     echo "printpi 상태 보고서  $(date '+%Y-%m-%d %H:%M:%S %Z')  (부팅 후 $(cut -d. -f1 /proc/uptime)초)"
-    echo "이미지: $(. /etc/os-release && echo "$PRETTY_NAME")"
+    echo "버전: printpi $(cat /etc/printpi-version 2>/dev/null || echo '(기록 없음)')   $(. /etc/os-release && echo "$PRETTY_NAME")"
     echo
 
     echo "== 네트워크 주소"

@@ -127,3 +127,28 @@ DEPLOY=1 sh yocto/run.sh && sh yocto/run-test.sh deploy   # 현장 설치용 QEM
 
 두 버전은 같은 빌드 폴더를 쓰므로 마지막에 빌드한 쪽이 deploy 폴더에 남는다. 빌드할 때마다 이미지를 꺼내 둔다
 (`printserver-rpi4-test.img`, `printserver-rpi4-deploy.img`).
+
+## 릴리스
+
+이미지에는 `git describe` 버전이 들어간다(`/etc/printpi-version`, `printpi-status.txt` 첫 줄). SD카드만 보고도 어느 릴리스인지 안다.
+시험용 이미지는 root 비밀번호가 비어 있으므로 공개하지 않는다. 현장 설치용만 올린다.
+
+```sh
+git tag v0.1.0
+DEPLOY=1 MACHINE=raspberrypi4-64 sh yocto/run.sh   # 태그가 붙은 깨끗한 커밋에서 빌드
+sh yocto/run-test.sh rpi
+sh yocto/release.sh                                # yocto/out/release/v0.1.0/ 에 파일을 만든다
+```
+
+1. `release.sh`가 만든 `.img.xz`를 그대로 Raspberry Pi Imager로 굽고 실물로 시험한다.
+   SSH가 거부되는지, `printpi-status.txt` 첫 줄 버전, 와이파이 접속, 휴대전화 인쇄를 확인한다.
+2. 통과하면 **시험한 그 파일들을** 올린다. 다시 빌드한 파일을 올리지 않는다.
+   ```sh
+   git push origin v0.1.0
+   gh release create v0.1.0 yocto/out/release/v0.1.0/* --title "printpi v0.1.0" --notes "..."
+   ```
+3. 받은 사람은 `SHA256SUMS`와 비교한다. Windows: `Get-FileHash printserver-rpi4-v0.1.0.img.xz`
+
+현장 설치용 빌드(`DEPLOY=1`)는 archiver로 GPL/LGPL/AGPL 패키지의 원본 소스와 패치를 모으고,
+`release.sh`가 이를 `-sources.tar`로, 패키지별 라이선스 목록을 `-licenses.txt`로 함께 묶는다.
+바이너리를 공개 배포할 때 대응 소스를 같이 제공하기 위해서다.

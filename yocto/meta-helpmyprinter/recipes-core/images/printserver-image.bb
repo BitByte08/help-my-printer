@@ -6,6 +6,13 @@ inherit core-image
 
 IMAGE_FEATURES += "ssh-server-dropbear"
 
+# SD카드가 어느 릴리스인지 알 수 있게 버전을 남긴다 (상태 보고서 첫 줄에 찍힌다).
+PRINTPI_VARIANT = "${@'deploy' if d.getVar('DEPLOY') == '1' else 'test'}"
+ROOTFS_POSTPROCESS_COMMAND += "printpi_version"
+printpi_version() {
+    echo "${PRINTPI_VERSION} (${PRINTPI_VARIANT})" > ${IMAGE_ROOTFS}${sysconfdir}/printpi-version
+}
+
 # hplip 본체(Python 도구 모음)는 빼고 hpcups 필터와 드라이버 정의만 넣는다.
 IMAGE_INSTALL = " \
     packagegroup-core-boot \

@@ -34,7 +34,7 @@ mkdir -p "$W/build/conf"
 cp "$REPO/conf/local.conf" "$REPO/conf/bblayers.conf" "$W/build/conf/"
 
 export BITBAKEDIR=$L/bitbake
-export BB_ENV_PASSTHROUGH_ADDITIONS="${BB_ENV_PASSTHROUGH_ADDITIONS:-} MACHINE DEPLOY"
+export BB_ENV_PASSTHROUGH_ADDITIONS="${BB_ENV_PASSTHROUGH_ADDITIONS:-} MACHINE DEPLOY PRINTPI_VERSION"
 set +u
 # shellcheck disable=SC1091
 . "$L/openembedded-core/oe-init-build-env" "$W/build" >/dev/null

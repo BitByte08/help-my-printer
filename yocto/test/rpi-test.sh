@@ -41,6 +41,9 @@ check "보정 필터" '/cups/filter/hpcups-j1660$'
 check "큐 자동 생성 udev 규칙" '70-j1660\.rules$'
 check "avahi-daemon" '/sbin/avahi-daemon$'
 
+check "버전 파일" '/etc/printpi-version$'
+echo "버전: $(tar -xjOf "$TAR" ./etc/printpi-version 2>/dev/null)"
+
 root=$(tar -xjOf "$TAR" ./etc/shadow | awk -F: '$1 == "root" { print $2 }')
 case "$root" in
 '') echo "root 비밀번호: 비어 있음 (시험용)" ;;
